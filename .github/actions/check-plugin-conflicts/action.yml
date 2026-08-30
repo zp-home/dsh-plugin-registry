@@ -19,7 +19,7 @@ inputs:
     required: false
     default: ''
   strict:
-    description: Fail with exit code 2 when advisory claim collisions are found
+    description: Fail with exit code 2 when contextual warnings are found; informational notices never block
     required: false
     default: 'false'
 

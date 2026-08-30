@@ -1,36 +1,51 @@
 # DSH 插件冲突注册表
 
-这个目录是 DSH 社区插件的公共协调层。它记录插件主动声明的 ID、服务、工具、命令、
-Skill、HTTP 路由和端口，帮助开发者在发布前发现已知冲突。注册表不下载、不安装，也不
-执行第三方插件代码。
+本仓库是 DSH 社区插件的公共协调层。它保存经过审核的插件身份、固定来源证据、Harness
+兼容范围和带上下文的公开名称声明，帮助开发者在发布前发现已知冲突。注册表不下载、不
+安装，也不执行第三方插件代码。
 
-这是一个独立基础设施仓库，不是 Agent Skill，也不属于任何 Skill 仓库。Skill、插件开发
-工具和第三方 CI 都只是它的客户端；中央数据、Schema、校验器与审核历史只保存在这里。
+本仓库不是 Agent Skill。Skill、插件开发工具和第三方 CI 都只是客户端；正式登记、候选
+发现、Schema、冲突语义和审核历史由本仓库独立维护。
 
-注册表只能反映已经合并到 `main` 的公开登记，不是全网唯一性证明。未登记插件、运行时
-动态生成的名称，以及语义相同但写法不同的路由都可能无法发现。
+注册表只能反映已经合并到 `main` 的公开登记，不是全网唯一性证明。未登记插件、动态名称、
+陈旧登记和未声明运行时上下文都会形成盲区。客户端查询失败时必须报告“未知/未检查”，不能
+把网络失败解释为“名称可用”。
 
-## 查询
+## 两类数据
 
-机器可读索引（静态只读 API）：
+| 数据 | 路径 | 是否预留 ID | 是否参与冲突判定 |
+|---|---|---:|---:|
+| 正式登记 | `registry/entries/`、`registry/index.json` | 是 | 是 |
+| 自动发现候选 | `discovery/candidates.json` | 否 | 否 |
+
+自动发现候选只是审核队列。GitHub topic、文本、star 或 code-search 命中都不能自动成为正式
+登记；只有包含固定来源证明、完整上下文并通过人工批准的 PR 才能进入正式索引。
+
+## 查询正式索引
+
+机器可读静态索引：
 
 ```text
 https://raw.githubusercontent.com/zp-home/dsh-plugin-registry/main/registry/index.json
 ```
 
-克隆本仓库后可以做精确查询：
+索引当前契约为 `dsh-plugin-registry/v2`。客户端必须同时检查 `schemaVersion` 和 `contract`，
+设置超时与响应大小上限，并允许用户覆盖 URL。Raw GitHub 可能存在短时缓存，因此查询结果
+必须显示来源和状态，不能声称提供实时全局锁。
+
+克隆仓库后可以精确查询：
 
 ```sh
-node scripts/plugin-registry.mjs search --kind service --name aliceSearch --index registry/index.json
-node scripts/plugin-registry.mjs search --kind id --name alice/dsh-search --index registry/index.json
-node scripts/plugin-registry.mjs search --kind port --name tcp:43123 --index registry/index.json
-node scripts/plugin-registry.mjs search --kind route --name "GET /api/plugins/alice-search/status" --index registry/index.json
+node scripts/plugin-registry.mjs search --kind id --name alice/web-search --index registry/index.json
+node scripts/plugin-registry.mjs search --kind service --name aliceWebSearchIndex --index registry/index.json
+node scripts/plugin-registry.mjs search --kind route --name "exact /api/plugins/alice-web-search/query" --index registry/index.json
 ```
 
-`--kind` 支持 `id`、`package`、`loader`、`service`、`tool`、`command`、`skill`、
-`route` 和 `port`，也支持索引里的复数形式。查询是大小写敏感的精确匹配。
+`--kind` 支持 `id`、`package`、`pluginName`、`loader`、`service`、`tool`、`command`、
+`skill`、`skillProvider`、`event`、`settings` 和 `route`，也接受索引中的复数名。查询使用
+大小写敏感的精确匹配。
 
-检查一个待发布插件：
+检查一个完整的中央登记清单：
 
 ```sh
 node scripts/plugin-registry.mjs check \
@@ -38,12 +53,13 @@ node scripts/plugin-registry.mjs check \
   --registry-url https://raw.githubusercontent.com/zp-home/dsh-plugin-registry/main/registry/index.json
 ```
 
-普通能力冲突默认输出告警并返回成功；添加 `--strict` 后，任何已知冲突都以退出码 `2`
-阻断 CI。清单格式错误或插件身份被其他仓库占用始终以退出码 `1` 阻断。
+默认模式下，上下文冲突输出告警但返回成功；`--strict` 仅在 `warning` 时返回 `2`。
+身份被不同仓库占用或清单无效返回 `1`；`notice` 只说明显式覆盖、确定性优先级或历史状态，
+永不阻断。网络或索引错误由 CLI 明确失败，调用方不得把失败降格成“无冲突”。
 
 ## GitHub Action
 
-插件仓库可以直接接入本仓库内的复合 Action：
+插件仓库可使用复合 Action 检查完整的中央登记清单：
 
 ```yaml
 name: dsh-plugin-conflicts
@@ -67,50 +83,78 @@ jobs:
           strict: 'false'
 ```
 
-默认模式下，中央索引暂时不可访问只会产生告警，避免网络故障拖垮插件 CI；`strict: 'true'`
-时索引不可用也会失败。无论是否严格，插件清单无效和身份冲突都会失败。生产项目可在本仓库
-发布稳定版本后，把 `@main` 固定到对应版本 tag 或提交 SHA。Action 代码版本与注册数据版本
-相互独立；默认持续查询本仓库 `main` 上的索引，也可以通过 `registry-ref` 或 `registry-url` 覆盖。
+Action 的普通模式在中央索引暂时不可访问时输出明确告警并保持工作流为绿色；严格模式会失败。
+生产项目应把 Action 代码固定到版本 tag 或 commit SHA，并通过 `registry-ref` 保持数据索引持续
+更新，或显式固定数据快照。Action 代码版本和注册数据版本是两个独立选择。
 
 ## 登记插件
 
-1. 复制 [`registry/examples/plugin-registration.example.json`](registry/examples/plugin-registration.example.json)，填写真实公开元数据。
-2. 保存为 `registry/entries/<github-owner>/<plugin-slug>.json`；文件路径必须等于 `plugin.id`。
-3. `plugin.repository` 必须是该 GitHub owner 下的规范 HTTPS 仓库地址。
-4. 运行索引生成和验证命令。
-5. 提交一个注册 PR；在 PR URL 后添加 `?template=register-plugin.md` 载入登记模板，并说明有意保留的冲突。
+1. 先在插件仓库根目录提交通过本地校验的 `dsh-plugin.naming.json`。
+2. 对照 `registry/examples/plugin-naming.example.json` 与 `plugin-registration.example.json`，填写真实公开元数据与上下文。
+3. 把来源 `commit` 固定到插件仓库的 40 位提交 SHA；不得使用分支或 tag。
+4. 保存为 `registry/entries/<github-owner>/<plugin-slug>.json`，路径必须等于 `plugin.id`。
+5. 重新生成索引并运行测试、正式校验和来源校验。
+6. 使用登记 PR 模板说明设计原因、作用、预期效果、有意重叠和剩余风险。
 
 ```sh
-node scripts/plugin-registry.mjs build-index
-node scripts/plugin-registry.mjs validate --check-index --format markdown
-node scripts/plugin-registry.check.mjs
+npm run build:index
+npm test
+npm run validate
+npm run validate:sources
 ```
 
-PR 创建不等于预留成功，只有合并到 `main` 后才成为公共记录。维护者审核身份、路径和数据
-完整性；普通能力冲突不自动拒绝，但检查结果会明确列出冲突值和涉及的插件仓库。更新已登记
-插件时修改原文件，不新建第二份身份记录。
+`plugin.repository` 的 GitHub owner、`plugin.id` 的 namespace 和 entry 路径必须一致。固定
+`source.namingManifest` 必须逐项证明 coordinate、package 和所有名称声明；上下文信息则由
+中央 entry 补充并由维护者审核。PR 创建不等于预留成功，只有合并到 `main` 后才成为正式记录。
 
-## 冲突语义
+## v2 上下文
 
-| 类型 | 默认结果 | 严格模式 | 说明 |
-|---|---|---|---|
-| 清单、路径或 schema 无效 | 阻断 | 阻断 | 注册数据无法可靠索引 |
-| 相同插件 ID 指向不同仓库 | 阻断 | 阻断 | 防止身份冒用或误登记 |
-| loader ID、包名、服务、工具、命令、Skill 或路由重复 | 告警 | 阻断 | 是否真冲突取决于插件组合和作用域 |
-| 两个插件要求同一固定端口 | 告警 | 阻断 | 同机运行时通常会绑定失败 |
-| 重复端口中少于两个是固定端口 | 提示 | 阻断 | 至少一方可配置，通常可以规避 |
+| 类型 | 必要上下文 | 判定 |
+|---|---|---|
+| Plugin ID | 仓库身份 | 同一 ID 指向不同仓库时阻断 |
+| npm package | 仓库身份 | 不同仓库声明同一包时告警 |
+| Plugin module name | 无 | 仅索引，不作为全局排他项 |
+| Loader ID | composition、layer、override intent | 显式后层替换为提示；其余重叠为告警 |
+| Service、Tool、Command、Provider、Settings | scope | 名称与 scope 重叠且 Harness 范围相交时告警 |
+| Skill | scope、provider、rank | rank 不同时提示；同 rank 重叠时告警 |
+| Event | scope、publisher/consumer、schema | 同名是共享通道；仅不兼容的多发布者 schema 告警 |
+| Web route | kind、path、scope | `kind + path + scope` 重叠且版本相交时告警 |
 
-名称和路由目前按登记值精确比较；端口按 `<protocol>:<port>` 比较。命名风格与前缀规范由
-独立的本地命名校验器负责，本注册表只处理跨插件的已知占用关系。
+每项正式登记都必须声明 `compatibility.harness.min`，可选 `maxExclusive`。版本比较遵循 SemVer，
+包括 prerelease 顺序；两个范围不相交时不报告运行时声明冲突。
 
-## 仓库治理
+端口不属于静态名称预留。端口是否冲突取决于同机部署、绑定地址、协议和配置覆盖，应由
+Profile/部署组合阶段检查，本中央索引不收录端口占用。
 
-中央仓库应在 GitHub 中启用以下保护，避免两个基于旧索引的 PR 并发合并：
+## 主动发现
 
-- 将 `plugin-registry / validate` 设为必需状态检查；
-- 至少需要一名维护者批准注册 PR；
-- 要求分支在合并前更新，或启用 GitHub merge queue；
-- 禁止绕过 `main` 分支保护直接写入登记目录。
+手工执行 10%、20% 或 100% 抽样：
 
-索引由登记文件确定性生成，`registry/index.json` 不接受手工编辑。工作流只读取 PR 内容，
-不会 checkout 或执行登记插件仓库里的代码。
+```sh
+node scripts/discover-plugins.mjs --coverage 10 --max-results 200
+```
+
+爬虫组合以下只读证据：
+
+- 配对的 `dsh` / `deepseek-harness` 与 `dsh-plugin` topics；
+- GitHub code search 找到的 `package.json#dsh.bundle`；
+- 固定当前 commit 上的根目录或嵌套 `package.json`；
+- 同目录可用的 `dsh-plugin.naming.json`。
+
+候选按证据等级优先，再在等级内按 star 排序。`--coverage` 是对 `--max-results` 截断后的
+证据样本取分位，并不是全 GitHub 的真实百分位。每周定时工作流默认检查 10%，也可手工选择
+20% 或 100%；它只更新候选 PR，不能直接写入正式登记。
+
+`dsh.bundle` 只能证明候选包身份，bundle 的 patch 路径本身不能证明 Loader、service、tool、
+command、Skill、event、settings 或 route ID。爬虫仅在同目录存在有效的
+`dsh-plugin.naming.json` 时收录这些运行时名称，不从仓库名、说明文字或 patch 注释猜测正式声明。
+
+## 审批与并发
+
+`main` 已启用严格分支保护：必需 `validate` 状态、至少一名批准、合并前更新、对话解决、
+线性历史、管理员同样受保护，并禁止 force push 和删除。`CODEOWNERS` 标出正式数据、Schema、
+脚本和工作流的维护边界。
+
+索引由 entry 确定性生成。CI 会拒绝过期或手工构造的不一致 `registry/index.json`，并验证所有
+固定来源。两个基于旧索引的 PR 不能同时绕过最新 base 合并；后合并者必须更新并重新运行检查。
+工作流只读取登记 JSON 和公开来源 JSON，不 checkout 或执行插件仓库代码。
