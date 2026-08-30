@@ -34,6 +34,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Smoke test conflict Action
+        uses: ./.github/actions/check-plugin-conflicts
+        with:
+          manifest: registry/examples/plugin-registration.example.json
+          registry-index: registry/index.json
       - name: Test registry behavior
         run: node scripts/plugin-registry.check.mjs
       - name: Validate entries and generated index
