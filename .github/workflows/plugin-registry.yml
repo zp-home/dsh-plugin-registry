@@ -1,0 +1,40 @@
+name: plugin-registry
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - registry/**
+      - scripts/plugin-registry.mjs
+      - scripts/plugin-registry.check.mjs
+      - .github/actions/check-plugin-conflicts/**
+      - .github/workflows/plugin-registry.yml
+  pull_request:
+    paths:
+      - registry/**
+      - scripts/plugin-registry.mjs
+      - scripts/plugin-registry.check.mjs
+      - .github/actions/check-plugin-conflicts/**
+      - .github/workflows/plugin-registry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-registry-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test registry behavior
+        run: node scripts/plugin-registry.check.mjs
+      - name: Validate entries and generated index
+        run: node scripts/plugin-registry.mjs validate --check-index --format github

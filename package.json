@@ -1,0 +1,11 @@
+{
+  "name": "dsh-plugin-registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/plugin-registry.check.mjs",
+    "validate": "node scripts/plugin-registry.mjs validate --check-index --format json",
+    "build:index": "node scripts/plugin-registry.mjs build-index"
+  }
+}

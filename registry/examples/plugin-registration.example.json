@@ -1,0 +1,28 @@
+{
+  "$schema": "../schema/plugin-registration.schema.json",
+  "schemaVersion": 1,
+  "plugin": {
+    "id": "alice/dsh-search",
+    "displayName": "Alice DSH Search",
+    "repository": "https://github.com/alice/dsh-search",
+    "package": "@alice/dsh-search",
+    "release": "1.0.0",
+    "status": "active"
+  },
+  "compatibility": {
+    "dsh": ">=0.1.2-alpha.2 <0.2.0"
+  },
+  "claims": {
+    "loaderIds": ["alice-search"],
+    "services": ["aliceSearch"],
+    "tools": ["alice_search"],
+    "commands": ["alice-search"],
+    "skills": ["alice-search"],
+    "routes": [
+      { "method": "GET", "path": "/api/plugins/alice-search/status" }
+    ],
+    "ports": [
+      { "protocol": "tcp", "port": 43123, "configurable": true }
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/zp-home/dsh-plugin-registry/main/registry/schema/plugin-registration.schema.json",
+  "title": "DSH plugin registry entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "plugin", "claims"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repository", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?/[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$"
+        },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "repository": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[^/]+/[^/]+/?$"
+        },
+        "package": { "type": "string", "minLength": 1, "maxLength": 214 },
+        "release": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "status": { "enum": ["active", "deprecated", "archived"] }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dsh": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "loaderIds": { "$ref": "#/$defs/names" },
+        "services": { "$ref": "#/$defs/names" },
+        "tools": { "$ref": "#/$defs/names" },
+        "commands": { "$ref": "#/$defs/names" },
+        "skills": { "$ref": "#/$defs/names" },
+        "routes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["method", "path"],
+            "properties": {
+              "method": { "enum": ["*", "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"] },
+              "path": { "type": "string", "pattern": "^/", "maxLength": 512 }
+            }
+          }
+        },
+        "ports": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["protocol", "port", "configurable"],
+            "properties": {
+              "protocol": { "enum": ["tcp", "udp"] },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "configurable": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "names": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[^\\s\\u0000-\\u001f\\u007f]+$"
+      }
+    }
+  }
+}
